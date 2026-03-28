@@ -47,3 +47,14 @@ k8s-delete:
 
 clean:
 	rm -rf app/node_modules app/build app/coverage app/logs
+
+docker-push:
+	@source ../../.devops-secrets/dockerhub.env && \
+	GIT_HASH=$$(git rev-parse --short HEAD) && \
+	echo "$${DOCKERHUB_TOKEN}" | docker login --username "$${DOCKERHUB_USERNAME}" --password-stdin && \
+	docker tag tetris-devops:latest $${DOCKERHUB_USERNAME}/tetris-devops:latest && \
+	docker tag tetris-devops:latest $${DOCKERHUB_USERNAME}/tetris-devops:1.0.0 && \
+	docker tag tetris-devops:latest $${DOCKERHUB_USERNAME}/tetris-devops:1.0.0-$${GIT_HASH} && \
+	docker push $${DOCKERHUB_USERNAME}/tetris-devops:latest && \
+	docker push $${DOCKERHUB_USERNAME}/tetris-devops:1.0.0 && \
+	docker push $${DOCKERHUB_USERNAME}/tetris-devops:1.0.0-$${GIT_HASH}
