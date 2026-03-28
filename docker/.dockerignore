@@ -1,0 +1,35 @@
+# Git
+.git/
+.gitignore
+
+# Environment files (injected at runtime)
+.env
+app/.env
+
+# Test files
+coverage/
+app/coverage/
+app/src/__tests__/
+app/src/__mocks__/
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Docker files
+docker-compose*.yml
+
+# Docs
+*.md
+
+# Scripts
+scripts/
+Makefile

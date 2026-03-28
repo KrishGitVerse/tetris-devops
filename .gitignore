@@ -1,0 +1,57 @@
+# ===========================
+# Dependencies
+# ===========================
+node_modules/
+**/node_modules/
+
+# ===========================
+# Environment Variables (NEVER commit real .env)
+# ===========================
+.env
+.env.local
+.env.production
+app/.env
+
+# ===========================
+# Build outputs
+# ===========================
+build/
+dist/
+app/build/
+
+# ===========================
+# Logs
+# ===========================
+logs/
+*.log
+npm-debug.log*
+
+# ===========================
+# OS files
+# ===========================
+.DS_Store
+Thumbs.db
+
+# ===========================
+# IDE files
+# ===========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===========================
+# Test coverage
+# ===========================
+coverage/
+.nyc_output/
+
+# ===========================
+# Docker
+# ===========================
+.docker/
+
+# ===========================
+# Kubernetes secrets (never commit real secrets)
+# ===========================
+k8s/secret-real.yaml
