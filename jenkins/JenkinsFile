@@ -1,0 +1,291 @@
+pipeline {
+
+    agent any
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        timestamps()
+    }
+
+    environment {
+        APP_NAME    = 'tetris-devops'
+        APP_VERSION = '1.0.0'
+    }
+
+    stages {
+
+        // ─────────────────────────────────────────────────────
+        // STAGE 1: Checkout
+        // ─────────────────────────────────────────────────────
+        stage('Checkout') {
+            steps {
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+                echo 'STAGE 1: Checkout'
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+
+                // Use github-token (Secret text) for checkout
+                withCredentials([
+                    string(
+                        credentialsId: 'github-token',
+                        variable: 'GITHUB_TOKEN'
+                    )
+                ]) {
+                    // Checkout using token authentication
+                    git(
+                        url: "https://github.com/YOUR_GITHUB_USERNAME/tetris-devops.git",
+                        branch: 'main',
+                        credentialsId: 'github-token'
+                    )
+                }
+
+                sh '''
+                    echo "Branch  : $(git branch --show-current)"
+                    echo "Commit  : $(git rev-parse --short HEAD)"
+                    echo "Message : $(git log -1 --format=%s)"
+                '''
+            }
+        }
+
+        // ─────────────────────────────────────────────────────
+        // STAGE 2: Install Dependencies
+        // ─────────────────────────────────────────────────────
+        stage('Install Dependencies') {
+            steps {
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+                echo 'STAGE 2: Install Dependencies'
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+
+                dir('app') {
+                    sh 'node --version'
+                    sh 'npm --version'
+                    sh 'npm ci'
+                    sh 'echo "Dependencies installed"'
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────
+        // STAGE 3: Run Tests
+        // ─────────────────────────────────────────────────────
+        stage('Run Tests') {
+            steps {
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+                echo 'STAGE 3: Run Tests'
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+
+                dir('app') {
+                    sh '''
+                        npx jest \
+                          --watchAll=false \
+                          --no-coverage \
+                          --verbose \
+                          --forceExit
+                    '''
+                }
+            }
+
+            post {
+                success { echo '✅ All tests passed' }
+                failure { echo '❌ Tests failed — pipeline stopped' }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────
+        // STAGE 4: Code Coverage
+        // ─────────────────────────────────────────────────────
+        stage('Code Coverage') {
+            steps {
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+                echo 'STAGE 4: Code Coverage'
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+
+                dir('app') {
+                    sh '''
+                        npx jest \
+                          --watchAll=false \
+                          --coverage \
+                          --forceExit \
+                          --coverageReporters=text \
+                          --coverageReporters=lcov
+                    '''
+                }
+            }
+
+            post {
+                always {
+                    archiveArtifacts(
+                        artifacts: 'app/coverage/**/*',
+                        allowEmptyArchive: true
+                    )
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────
+        // STAGE 5: Build Docker Image
+        // ─────────────────────────────────────────────────────
+        stage('Build Docker Image') {
+            steps {
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+                echo 'STAGE 5: Build Docker Image'
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+
+                script {
+                    // Get git hash inside script block
+                    def gitHash = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    env.GIT_HASH = gitHash
+
+                    echo "Building image: ${env.APP_NAME}:${env.APP_VERSION}-${gitHash}"
+
+                    sh """
+                        docker build \
+                          -f docker/Dockerfile \
+                          -t ${env.APP_NAME}:latest \
+                          -t ${env.APP_NAME}:${env.APP_VERSION} \
+                          -t ${env.APP_NAME}:${env.APP_VERSION}-${gitHash} \
+                          .
+                    """
+
+                    sh "docker images | grep ${env.APP_NAME}"
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────
+        // STAGE 6: Push to Docker Hub
+        // ─────────────────────────────────────────────────────
+        stage('Push to Docker Hub') {
+            steps {
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+                echo 'STAGE 6: Push to Docker Hub'
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+
+                script {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'dockerhub-credentials',
+                            usernameVariable: 'DHUB_USER',
+                            passwordVariable: 'DHUB_TOKEN'
+                        )
+                    ]) {
+                        // Login
+                        sh '''
+                            echo "$DHUB_TOKEN" | \
+                            docker login \
+                              --username "$DHUB_USER" \
+                              --password-stdin
+                        '''
+
+                        // Tag with Docker Hub username
+                        sh """
+                            docker tag ${env.APP_NAME}:latest \
+                              \$DHUB_USER/${env.APP_NAME}:latest
+
+                            docker tag ${env.APP_NAME}:latest \
+                              \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}
+
+                            docker tag ${env.APP_NAME}:latest \
+                              \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}-${env.GIT_HASH}
+                        """
+
+                        // Push all tags
+                        sh """
+                            docker push \$DHUB_USER/${env.APP_NAME}:latest
+                            docker push \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}
+                            docker push \
+                              \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}-${env.GIT_HASH}
+                        """
+
+                        echo "✅ Successfully pushed to Docker Hub"
+                    }
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────
+        // STAGE 7: Smoke Test
+        // ─────────────────────────────────────────────────────
+        stage('Smoke Test') {
+            steps {
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+                echo 'STAGE 7: Smoke Test'
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+
+                script {
+                    def containerName = "smoke-${env.BUILD_NUMBER}"
+
+                    // Start container on a different port
+                    sh """
+                        docker run -d \
+                          --name ${containerName} \
+                          -p 3099:3001 \
+                          ${env.APP_NAME}:latest
+                    """
+
+                    // Wait for startup
+                    sh 'sleep 8'
+
+                    // Hit health endpoint
+                    sh """
+                        HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
+                          http://localhost:3099/health)
+
+                        echo "Health check response: \$HTTP_CODE"
+
+                        if [ "\$HTTP_CODE" != "200" ]; then
+                          echo "❌ Smoke test FAILED"
+                          exit 1
+                        fi
+
+                        echo "✅ Smoke test PASSED"
+                    """
+                }
+            }
+
+            post {
+                always {
+                    script {
+                        def containerName = "smoke-${env.BUILD_NUMBER}"
+                        sh "docker stop ${containerName} || true"
+                        sh "docker rm   ${containerName} || true"
+                    }
+                }
+            }
+        }
+
+    } // end stages
+
+    // ── Post pipeline ─────────────────────────────────────────
+    post {
+        success {
+            echo '''
+            ╔══════════════════════════════════╗
+            ║   ✅  PIPELINE SUCCEEDED          ║
+            ╚══════════════════════════════════╝
+            '''
+        }
+
+        failure {
+            echo '''
+            ╔══════════════════════════════════╗
+            ║   ❌  PIPELINE FAILED             ║
+            ╚══════════════════════════════════╝
+            '''
+        }
+
+        always {
+            script {
+                sh "docker rmi ${env.APP_NAME}:latest          || true"
+                sh "docker rmi ${env.APP_NAME}:${env.APP_VERSION} || true"
+                sh "docker image prune -f                      || true"
+            }
+        }
+    }
+
+} // end pipeline
