@@ -552,6 +552,56 @@ pipeline {
             }
         }
 
+        // // ─────────────────────────────────────────────────────
+        // // STAGE 7: Smoke Test
+        // // ─────────────────────────────────────────────────────
+        // stage('Smoke Test') {
+        //     steps {
+        //         echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+        //         echo 'STAGE 7: Smoke Test'
+        //         echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+
+        //         script {
+        //             def containerName = "smoke-${env.BUILD_NUMBER}"
+
+        //             // Start container on a different port
+        //             sh """
+        //                 docker run -d \
+        //                   --name ${containerName} \
+        //                   -p 3099:3001 \
+        //                   ${env.APP_NAME}:latest
+        //             """
+
+        //             // Wait for startup
+        //             sh 'sleep 8'
+
+        //             // Hit health endpoint
+        //             sh """
+        //                 HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
+        //                   http://localhost:3099/health)
+
+        //                 echo "Health check response: \$HTTP_CODE"
+
+        //                 if [ "\$HTTP_CODE" != "200" ]; then
+        //                   echo "❌ Smoke test FAILED"
+        //                   exit 1
+        //                 fi
+
+        //                 echo "✅ Smoke test PASSED"
+        //             """
+        //         }
+        //     }
+
+        //     post {
+        //         always {
+        //             script {
+        //                 def containerName = "smoke-${env.BUILD_NUMBER}"
+        //                 sh "docker stop ${containerName} || true"
+        //                 sh "docker rm   ${containerName} || true"
+        //             }
+        //         }
+        //     }
+        // }
         // ─────────────────────────────────────────────────────
         // STAGE 7: Smoke Test
         // ─────────────────────────────────────────────────────
@@ -563,41 +613,41 @@ pipeline {
 
                 script {
                     def containerName = "smoke-${env.BUILD_NUMBER}"
+                    def networkName   = "smoke-net-${env.BUILD_NUMBER}"
 
-                    // Start container on a different port
-                    sh """
-                        docker run -d \
-                          --name ${containerName} \
-                          -p 3099:3001 \
-                          ${env.APP_NAME}:latest
-                    """
+                    try {
+                        // Create an isolated network for this test
+                        sh "docker network create ${networkName}"
 
-                    // Wait for startup
-                    sh 'sleep 8'
+                        // Start the app container on that network
+                        sh """
+                            docker run -d \
+                            --name ${containerName} \
+                            --network ${networkName} \
+                            ${env.APP_NAME}:latest
+                        """
 
-                    // Hit health endpoint
-                    sh """
-                        HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
-                          http://localhost:3099/health)
+                        // Wait for app to start
+                        sh 'sleep 10'
 
-                        echo "Health check response: \$HTTP_CODE"
+                        // Run curl FROM INSIDE a container on the same network
+                        // This avoids the localhost-between-containers problem
+                        sh """
+                            docker run --rm \
+                            --network ${networkName} \
+                            curlimages/curl:latest \
+                            curl -s -o /dev/null -w "%{http_code}" \
+                            http://${containerName}:3001/health \
+                            | grep -q "200" && \
+                            echo "✅ Smoke test PASSED" || \
+                            (echo "❌ Smoke test FAILED" && exit 1)
+                        """
 
-                        if [ "\$HTTP_CODE" != "200" ]; then
-                          echo "❌ Smoke test FAILED"
-                          exit 1
-                        fi
-
-                        echo "✅ Smoke test PASSED"
-                    """
-                }
-            }
-
-            post {
-                always {
-                    script {
-                        def containerName = "smoke-${env.BUILD_NUMBER}"
-                        sh "docker stop ${containerName} || true"
-                        sh "docker rm   ${containerName} || true"
+                    } finally {
+                        // Always clean up — even if test fails
+                        sh "docker stop  ${containerName} || true"
+                        sh "docker rm    ${containerName} || true"
+                        sh "docker network rm ${networkName} || true"
                     }
                 }
             }
