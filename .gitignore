@@ -55,3 +55,8 @@ coverage/
 # Kubernetes secrets (never commit real secrets)
 # ===========================
 k8s/secret-real.yaml
+
+# ===========================
+# Architecture Diagrams
+# ===========================
+architecture-diagrams/
