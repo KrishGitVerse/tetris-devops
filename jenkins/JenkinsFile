@@ -482,8 +482,7 @@ pipeline {
                     withCredentials([
                         usernamePassword(
                             credentialsId: 'sonar-token',
-                            usernameVariable: 'SONAR_USER',
-                            passwordVariable: 'SONAR_PASS'
+                            variable: 'SONAR_TOKEN'
                         )
                     ]) {
                         sh '''
@@ -498,8 +497,7 @@ pipeline {
                             -Dsonar.test.exclusions=**/node_modules/**,**/build/** \
                             -Dsonar.coverage.exclusions=**/node_modules/**,**/build/**,**/__tests__/**,**/index.jsx \
                             -Dsonar.host.url=http://host.docker.internal:9000 \
-                            -Dsonar.login=${SONAR_USER} \
-                            -Dsonar.password=${SONAR_PASS} \
+                            -Dsonar.token=${SONAR_TOKEN} \
                             -Dsonar.qualitygate.wait=true \
                             -Dsonar.sourceEncoding=UTF-8
                         '''
