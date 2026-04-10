@@ -468,12 +468,61 @@ pipeline {
         }
 
         // ─────────────────────────────────────────────────────
-        // STAGE 5: Build Docker Image
+        // STAGE 5: SonarQube Analysis
+        // WHY: Scan code for bugs, vulnerabilities, code smells
+        // Pipeline FAILS if quality gate is not passed
+        // ─────────────────────────────────────────────────────
+        stage('SonarQube Analysis') {
+            steps {
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+                echo 'STAGE 5: SonarQube Analysis'
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+
+                script {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'sonar-token',
+                            usernameVariable: 'SONAR_USER',
+                            passwordVariable: 'SONAR_PASS'
+                        )
+                    ]) {
+                        sh '''
+                            sonar-scanner \
+                            -Dsonar.projectKey=tetris-devops \
+                            -Dsonar.projectName="Tetris DevOps" \
+                            -Dsonar.projectVersion=1.0.0 \
+                            -Dsonar.sources=app/src \
+                            -Dsonar.tests=app/src/__tests__ \
+                            -Dsonar.javascript.lcov.reportPaths=app/coverage/lcov.info \
+                            -Dsonar.exclusions=**/node_modules/**,**/build/**,**/coverage/**,**/__mocks__/** \
+                            -Dsonar.test.exclusions=**/node_modules/**,**/build/** \
+                            -Dsonar.coverage.exclusions=**/node_modules/**,**/build/**,**/__tests__/**,**/index.jsx \
+                            -Dsonar.host.url=http://host.docker.internal:9000 \
+                            -Dsonar.login=${SONAR_USER} \
+                            -Dsonar.password=${SONAR_PASS} \
+                            -Dsonar.qualitygate.wait=true \
+                            -Dsonar.sourceEncoding=UTF-8
+                        '''
+                    }
+                }
+            }
+
+            post {
+                success { echo '✅ SonarQube quality gate PASSED' }
+                failure {
+                    echo '❌ SonarQube quality gate FAILED'
+                    echo 'Check http://localhost:9000 for details'
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────
+        // STAGE 6: Build Docker Image
         // ─────────────────────────────────────────────────────
         stage('Build Docker Image') {
             steps {
                 echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-                echo 'STAGE 5: Build Docker Image'
+                echo 'STAGE 6: Build Docker Image'
                 echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
 
                 script {
@@ -502,12 +551,12 @@ pipeline {
         }
 
         // ─────────────────────────────────────────────────────
-        // STAGE 6: Push to Docker Hub
+        // STAGE 7: Push to Docker Hub
         // ─────────────────────────────────────────────────────
         stage('Push to Docker Hub') {
             steps {
                 echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-                echo 'STAGE 6: Push to Docker Hub'
+                echo 'STAGE 7: Push to Docker Hub'
                 echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
 
                 script {
@@ -603,12 +652,12 @@ pipeline {
         //     }
         // }
         // ─────────────────────────────────────────────────────
-        // STAGE 7: Smoke Test
+        // STAGE 8: Smoke Test
         // ─────────────────────────────────────────────────────
         stage('Smoke Test') {
             steps {
                 echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-                echo 'STAGE 7: Smoke Test'
+                echo 'STAGE 8: Smoke Test'
                 echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
 
                 script {
