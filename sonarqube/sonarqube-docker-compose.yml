@@ -7,7 +7,6 @@ services:
       - "9000:9000"
 
     environment:
-      # Database connection (uses built-in H2 for local dev)
       - SONAR_JDBC_URL=jdbc:postgresql://sonar-db:5432/sonar
       - SONAR_JDBC_USERNAME=sonar
       - SONAR_JDBC_PASSWORD=sonar
@@ -21,10 +20,12 @@ services:
       sonar-db:
         condition: service_healthy
 
+    # Required on Linux — ignored on Mac/Windows
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     restart: unless-stopped
 
-    # SonarQube needs higher virtual memory
-    # This is required on Mac with Docker Desktop
     ulimits:
       nofile:
         soft: 65536

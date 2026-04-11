@@ -1,28 +1,17 @@
-# 🎮 Tetris DevOps
+# Tetris DevOps
 
-A production-grade Tetris game built with a full DevOps pipeline.
+Production-grade Tetris with full CI/CD pipeline.
 
-## 🛠️ Tech Stack
+## Prerequisites
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18 |
-| Backend | Node.js + Express |
-| Containerization | Docker (multi-stage) |
-| CI Pipeline | Jenkins |
-| Code Quality | SonarQube |
-| Orchestration | Kubernetes (Minikube) |
-| GitOps | ArgoCD |
-| Monitoring | Prometheus + Grafana |
+| Tool | Mac | Windows | Linux |
+|------|-----|---------|-------|
+| Git | [git-scm.com](https://git-scm.com) | [git-scm.com](https://git-scm.com) | `sudo apt install git` |
+| Node.js 18+ | [nodejs.org](https://nodejs.org) | [nodejs.org](https://nodejs.org) | `curl -fsSL https://deb.nodesource.com/setup_20.x \| sudo bash -` |
+| Docker | [Docker Desktop](https://www.docker.com/products/docker-desktop) | [Docker Desktop](https://www.docker.com/products/docker-desktop) | `curl -fsSL https://get.docker.com \| sh` |
 
-## ⚡ Quick Start (Any Machine)
+## Quick start — any OS
 
-### Prerequisites
-- [Git](https://git-scm.com)
-- [Node.js 18+](https://nodejs.org) — choose LTS
-- [Docker Desktop](https://www.docker.com/products/docker-desktop)
-
-### One-command setup
 ```bash
 git clone https://github.com/KrishGitVerse/tetris-devops.git
 cd tetris-devops
@@ -30,84 +19,43 @@ chmod +x scripts/setup.sh
 ./scripts/setup.sh
 ```
 
-App opens automatically at **http://localhost:3001** 🎮
+**Windows users** — run in Git Bash or WSL2, not Command Prompt.
 
----
-
-## 🧪 Run Tests Only (no Docker needed)
+## Run with Docker only (no Node.js needed)
 
 ```bash
-git clone https://github.com/KrishGitVerse/tetris-devops.git
-cd tetris-devops
-cd app
-npm install
-npx jest --watchAll=false --verbose
+# Pull and run directly from Docker Hub — works on any OS
+docker run -d \
+  -p 3001:3001 \
+  --name tetris-app \
+  techiekrish/tetris-devops:latest
+
+# Open http://localhost:3001
 ```
 
----
-
-## 🐳 Run with Docker manually
+## Start Jenkins
 
 ```bash
-# Build
-docker build -f docker/Dockerfile -t tetris-devops:latest .
+# Mac / Linux
+docker compose -f jenkins/jenkins-docker-compose.yml up -d
 
-# Run
-docker run -d -p 3001:3001 --name tetris-app tetris-devops:latest
-
-# Open
-open http://localhost:3001
+# Windows (Git Bash)
+docker compose -f jenkins/jenkins-docker-compose.windows.yml up -d
 ```
 
----
+## Start SonarQube
 
-## 🔌 API Endpoints
+```bash
+# All OS — same command
+docker compose -f sonarqube/sonarqube-docker-compose.yml up -d
+```
+
+## API endpoints
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /` | Tetris game UI |
-| `GET /health` | Kubernetes liveness probe |
-| `GET /ready` | Kubernetes readiness probe |
+| `GET /` | Tetris game |
+| `GET /health` | Liveness probe |
+| `GET /ready` | Readiness probe |
 | `GET /metrics` | Prometheus metrics |
-| `GET /api/info` | App information |
-
----
-
-## 📁 Project Structure
-
-```
-tetris-devops/
-├── app/                  # React + Node.js application
-│   ├── src/
-│   │   ├── App.jsx       # Main Tetris game
-│   │   ├── server/       # Express server
-│   │   └── utils/        # Game logic + logger
-│   └── __tests__/        # Unit tests
-├── docker/               # Dockerfile
-├── jenkins/              # Jenkinsfile + Jenkins setup
-├── k8s/                  # Kubernetes manifests (Phase 6)
-├── monitoring/           # Prometheus + Grafana (Phase 8)
-└── scripts/              # Automation scripts
-```
-
----
-
-## 🚀 CI/CD Pipeline
-
-```
-git push → Jenkins → Test → Build → Push to Docker Hub → Deploy
-```
-
-Jenkins runs at **http://localhost:8080**
-
----
-
-## 🛑 Stop Everything
-
-```bash
-# Stop the app
-docker rm -f tetris-app
-
-# Stop Jenkins
-docker compose -f jenkins/jenkins-docker-compose.yml down
-```
+| `GET /api/info` | App info |
