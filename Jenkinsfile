@@ -494,21 +494,21 @@ pipeline {
                         // We store the token in the PASSWORD field
                         // and pass it via sonar.token parameter
                         sh """
-                            sonar-scanner \
-                              -Dsonar.projectKey=tetris-devops \
-                              -Dsonar.projectName="Tetris DevOps" \
-                              -Dsonar.projectVersion=1.0.0 \
-                              -Dsonar.sources=app/src \
-                              -Dsonar.tests=app/src/__tests__ \
-                              -Dsonar.javascript.lcov.reportPaths=app/coverage/lcov.info \
-                              -Dsonar.exclusions=**/node_modules/**,**/build/**,**/coverage/**,**/__mocks__/** \
-                              -Dsonar.test.exclusions=**/node_modules/**,**/build/** \
-                              -Dsonar.coverage.exclusions=**/node_modules/**,**/build/**,**/__tests__/**,**/index.jsx \
-                              -Dsonar.host.url=http://host.docker.internal:9000 \
-                              -Dsonar.token=\${SONAR_PASS} \
-                              -Dsonar.qualitygate.wait=true \
-                              -Dsonar.sourceEncoding=UTF-8
-                        """
+                        sonar-scanner \
+                        -Dsonar.projectKey=tetris-devops \
+                        -Dsonar.projectName="Tetris DevOps" \
+                        -Dsonar.projectVersion=1.0.0 \
+                        -Dsonar.sources=app/src \
+                        -Dsonar.tests=app/src/__tests__ \
+                        -Dsonar.javascript.lcov.reportPaths=app/coverage/lcov.info \
+                        -Dsonar.exclusions=**/node_modules/**,**/build/**,**/coverage/**,**/__mocks__/**,**/__tests__/** \
+                        -Dsonar.test.exclusions=**/node_modules/**,**/build/** \
+                        -Dsonar.coverage.exclusions=**/node_modules/**,**/build/**,**/index.jsx \
+                        -Dsonar.host.url=http://host.docker.internal:9000 \
+                        -Dsonar.token=\${SONAR_PASS} \
+                        -Dsonar.qualitygate.wait=true \
+                        -Dsonar.sourceEncoding=UTF-8
+                    """
                     }
                 }
             }
