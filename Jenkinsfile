@@ -522,36 +522,112 @@ pipeline {
             }
         }
 
+        // // ─────────────────────────────────────────────────────
+        // // STAGE 6: Build Docker Image
+        // // ─────────────────────────────────────────────────────
+        // stage('Build Docker Image') {
+        //     steps {
+        //         echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+        //         echo 'STAGE 6: Build Docker Image'
+        //         echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+
+        //         script {
+        //             // Get git hash inside script block
+        //             def gitHash = sh(
+        //                 script: 'git rev-parse --short HEAD',
+        //                 returnStdout: true
+        //             ).trim()
+
+        //             env.GIT_HASH = gitHash
+
+        //             echo "Building image: ${env.APP_NAME}:${env.APP_VERSION}-${gitHash}"
+
+        //             sh """
+        //                 docker build \
+        //                   -f docker/Dockerfile \
+        //                   -t ${env.APP_NAME}:latest \
+        //                   -t ${env.APP_NAME}:${env.APP_VERSION} \
+        //                   -t ${env.APP_NAME}:${env.APP_VERSION}-${gitHash} \
+        //                   .
+        //             """
+
+        //             sh "docker images | grep ${env.APP_NAME}"
+        //         }
+        //     }
+        // }
+
         // ─────────────────────────────────────────────────────
-        // STAGE 6: Build Docker Image
+        // STAGE 6: Build and Push Multi-platform Image
+        // Replaces separate Build + Push stages
         // ─────────────────────────────────────────────────────
-        stage('Build Docker Image') {
+        stage('Build and Push Multi-platform') {
             steps {
                 echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-                echo 'STAGE 6: Build Docker Image'
+                echo 'STAGE 6: Build and push multi-platform image'
+                echo 'Platforms: linux/amd64 + linux/arm64'
                 echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
 
                 script {
-                    // Get git hash inside script block
                     def gitHash = sh(
                         script: 'git rev-parse --short HEAD',
                         returnStdout: true
                     ).trim()
-
                     env.GIT_HASH = gitHash
 
-                    echo "Building image: ${env.APP_NAME}:${env.APP_VERSION}-${gitHash}"
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'dockerhub-credentials',
+                            usernameVariable: 'DHUB_USER',
+                            passwordVariable: 'DHUB_TOKEN'
+                        )
+                    ]) {
+                        // Login
+                        sh '''
+                            echo "$DHUB_TOKEN" | docker login \
+                            --username "$DHUB_USER" \
+                            --password-stdin
+                        '''
 
-                    sh """
-                        docker build \
-                          -f docker/Dockerfile \
-                          -t ${env.APP_NAME}:latest \
-                          -t ${env.APP_NAME}:${env.APP_VERSION} \
-                          -t ${env.APP_NAME}:${env.APP_VERSION}-${gitHash} \
-                          .
-                    """
+                        // Set up buildx
+                        sh '''
+                            docker buildx rm multiplatform-builder \
+                            2>/dev/null || true
+                            docker buildx create \
+                            --name multiplatform-builder \
+                            --driver docker-container \
+                            --platform linux/amd64,linux/arm64 \
+                            --use
+                            docker buildx inspect --bootstrap
+                        '''
 
-                    sh "docker images | grep ${env.APP_NAME}"
+                        // Build and push in one command
+                        sh """
+                            docker buildx build \
+                            --platform linux/amd64,linux/arm64 \
+                            --file docker/Dockerfile \
+                            --tag \$DHUB_USER/${env.APP_NAME}:latest \
+                            --tag \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION} \
+                            --tag \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}-${gitHash} \
+                            --push \
+                            .
+                        """
+
+                        // Verify both platforms
+                        sh """
+                            docker buildx imagetools inspect \
+                            \$DHUB_USER/${env.APP_NAME}:latest | \
+                            grep -E "Platform|linux"
+                        """
+
+                        // Cleanup
+                        sh '''
+                            docker buildx rm multiplatform-builder \
+                            2>/dev/null || true
+                            docker buildx use default
+                        '''
+
+                        echo "✅ Pushed for linux/amd64 and linux/arm64"
+                    }
                 }
             }
         }
