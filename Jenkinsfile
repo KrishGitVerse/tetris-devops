@@ -560,7 +560,12 @@ pipeline {
         // STAGE 6: Build and Push Multi-platform Image
         // Replaces separate Build + Push stages
         // ─────────────────────────────────────────────────────
-        stage('Build and Push Multi-platform') {
+        // ─────────────────────────────────────────────────────
+        // STAGE 6: Build and Push Multi-platform Image
+        // Builds for linux/amd64 AND linux/arm64
+        // Pushes directly to Docker Hub — no local image needed
+        // ─────────────────────────────────────────────────────
+        stage('Build and Push') {
             steps {
                 echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
                 echo 'STAGE 6: Build and push multi-platform image'
@@ -581,67 +586,130 @@ pipeline {
                             passwordVariable: 'DHUB_TOKEN'
                         )
                     ]) {
-                        // Login
+                        // Login to Docker Hub
                         sh '''
                             echo "$DHUB_TOKEN" | docker login \
-                            --username "$DHUB_USER" \
-                            --password-stdin
+                              --username "$DHUB_USER" \
+                              --password-stdin
                         '''
 
-                        // Set up buildx
+                        // Set up buildx builder
                         sh '''
                             docker buildx rm multiplatform-builder \
-                            2>/dev/null || true
+                              2>/dev/null || true
                             docker buildx create \
-                            --name multiplatform-builder \
-                            --driver docker-container \
-                            --platform linux/amd64,linux/arm64 \
-                            --use
+                              --name multiplatform-builder \
+                              --driver docker-container \
+                              --platform linux/amd64,linux/arm64 \
+                              --use
                             docker buildx inspect --bootstrap
                         '''
 
-                        // Build and push in one command
+                        // Build for both platforms and push directly
+                        // --push sends to Docker Hub without local image
                         sh """
                             docker buildx build \
-                            --platform linux/amd64,linux/arm64 \
-                            --file docker/Dockerfile \
-                            --tag \$DHUB_USER/${env.APP_NAME}:latest \
-                            --tag \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION} \
-                            --tag \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}-${gitHash} \
-                            --push \
-                            .
+                              --platform linux/amd64,linux/arm64 \
+                              --file docker/Dockerfile \
+                              --tag \$DHUB_USER/${env.APP_NAME}:latest \
+                              --tag \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION} \
+                              --tag \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}-${gitHash} \
+                              --provenance=false \
+                              --push \
+                              .
                         """
 
-                        // Verify both platforms
+                        // Verify both platforms on Docker Hub
                         sh """
+                            echo "Verifying platforms..."
                             docker buildx imagetools inspect \
-                            \$DHUB_USER/${env.APP_NAME}:latest | \
-                            grep -E "Platform|linux"
+                              \$DHUB_USER/${env.APP_NAME}:latest | \
+                              grep -E "Platform|linux"
                         """
 
-                        // Cleanup
+                        // Cleanup builder
                         sh '''
                             docker buildx rm multiplatform-builder \
-                            2>/dev/null || true
+                              2>/dev/null || true
                             docker buildx use default
                         '''
 
-                        echo "✅ Pushed for linux/amd64 and linux/arm64"
+                        echo "✅ Pushed linux/amd64 and linux/arm64 to Docker Hub"
                     }
                 }
             }
+
+            post {
+                success { echo '✅ Multi-platform image pushed successfully' }
+                failure { echo '❌ Build and push failed' }
+            }
         }
 
+        // // ─────────────────────────────────────────────────────
+        // // STAGE 7: Push to Docker Hub
+        // // ─────────────────────────────────────────────────────
+        // stage('Push to Docker Hub') {
+        //     steps {
+        //         echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+        //         echo 'STAGE 7: Push to Docker Hub'
+        //         echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+
+        //         script {
+        //             withCredentials([
+        //                 usernamePassword(
+        //                     credentialsId: 'dockerhub-credentials',
+        //                     usernameVariable: 'DHUB_USER',
+        //                     passwordVariable: 'DHUB_TOKEN'
+        //                 )
+        //             ]) {
+        //                 // Login
+        //                 sh '''
+        //                     echo "$DHUB_TOKEN" | \
+        //                     docker login \
+        //                       --username "$DHUB_USER" \
+        //                       --password-stdin
+        //                 '''
+
+        //                 // Tag with Docker Hub username
+        //                 sh """
+        //                     docker tag ${env.APP_NAME}:latest \
+        //                       \$DHUB_USER/${env.APP_NAME}:latest
+
+        //                     docker tag ${env.APP_NAME}:latest \
+        //                       \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}
+
+        //                     docker tag ${env.APP_NAME}:latest \
+        //                       \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}-${env.GIT_HASH}
+        //                 """
+
+        //                 // Push all tags
+        //                 sh """
+        //                     docker push \$DHUB_USER/${env.APP_NAME}:latest
+        //                     docker push \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}
+        //                     docker push \
+        //                       \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}-${env.GIT_HASH}
+        //                 """
+
+        //                 echo "✅ Successfully pushed to Docker Hub"
+        //             }
+        //         }
+        //     }
+        // }
+
         // ─────────────────────────────────────────────────────
-        // STAGE 7: Push to Docker Hub
+        // STAGE 7: Smoke Test
+        // Pulls from Docker Hub to verify the pushed image works
         // ─────────────────────────────────────────────────────
-        stage('Push to Docker Hub') {
+        stage('Smoke Test') {
             steps {
                 echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-                echo 'STAGE 7: Push to Docker Hub'
+                echo 'STAGE 7: Smoke Test'
                 echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
 
                 script {
+                    def containerName = "smoke-${env.BUILD_NUMBER}"
+                    def networkName   = "smoke-net-${env.BUILD_NUMBER}"
+
                     withCredentials([
                         usernamePassword(
                             credentialsId: 'dockerhub-credentials',
@@ -649,136 +717,38 @@ pipeline {
                             passwordVariable: 'DHUB_TOKEN'
                         )
                     ]) {
-                        // Login
-                        sh '''
-                            echo "$DHUB_TOKEN" | \
-                            docker login \
-                              --username "$DHUB_USER" \
-                              --password-stdin
-                        '''
+                        try {
+                            // Create isolated network
+                            sh "docker network create ${networkName}"
 
-                        // Tag with Docker Hub username
-                        sh """
-                            docker tag ${env.APP_NAME}:latest \
-                              \$DHUB_USER/${env.APP_NAME}:latest
+                            // Pull and run the image we just pushed
+                            sh """
+                                docker run -d \
+                                  --name ${containerName} \
+                                  --network ${networkName} \
+                                  \$DHUB_USER/${env.APP_NAME}:latest
+                            """
 
-                            docker tag ${env.APP_NAME}:latest \
-                              \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}
+                            // Wait for startup
+                            sh 'sleep 10'
 
-                            docker tag ${env.APP_NAME}:latest \
-                              \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}-${env.GIT_HASH}
-                        """
+                            // Test health endpoint from within network
+                            sh """
+                                docker run --rm \
+                                  --network ${networkName} \
+                                  curlimages/curl:latest \
+                                  curl -sf \
+                                  http://${containerName}:3001/health \
+                                  | grep -q "healthy" && \
+                                  echo "✅ Smoke test PASSED" || \
+                                  (echo "❌ Smoke test FAILED" && exit 1)
+                            """
 
-                        // Push all tags
-                        sh """
-                            docker push \$DHUB_USER/${env.APP_NAME}:latest
-                            docker push \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}
-                            docker push \
-                              \$DHUB_USER/${env.APP_NAME}:${env.APP_VERSION}-${env.GIT_HASH}
-                        """
-
-                        echo "✅ Successfully pushed to Docker Hub"
-                    }
-                }
-            }
-        }
-
-        // // ─────────────────────────────────────────────────────
-        // // STAGE 7: Smoke Test
-        // // ─────────────────────────────────────────────────────
-        // stage('Smoke Test') {
-        //     steps {
-        //         echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-        //         echo 'STAGE 7: Smoke Test'
-        //         echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-
-        //         script {
-        //             def containerName = "smoke-${env.BUILD_NUMBER}"
-
-        //             // Start container on a different port
-        //             sh """
-        //                 docker run -d \
-        //                   --name ${containerName} \
-        //                   -p 3099:3001 \
-        //                   ${env.APP_NAME}:latest
-        //             """
-
-        //             // Wait for startup
-        //             sh 'sleep 8'
-
-        //             // Hit health endpoint
-        //             sh """
-        //                 HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
-        //                   http://localhost:3099/health)
-
-        //                 echo "Health check response: \$HTTP_CODE"
-
-        //                 if [ "\$HTTP_CODE" != "200" ]; then
-        //                   echo "❌ Smoke test FAILED"
-        //                   exit 1
-        //                 fi
-
-        //                 echo "✅ Smoke test PASSED"
-        //             """
-        //         }
-        //     }
-
-        //     post {
-        //         always {
-        //             script {
-        //                 def containerName = "smoke-${env.BUILD_NUMBER}"
-        //                 sh "docker stop ${containerName} || true"
-        //                 sh "docker rm   ${containerName} || true"
-        //             }
-        //         }
-        //     }
-        // }
-        // ─────────────────────────────────────────────────────
-        // STAGE 8: Smoke Test
-        // ─────────────────────────────────────────────────────
-        stage('Smoke Test') {
-            steps {
-                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-                echo 'STAGE 8: Smoke Test'
-                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-
-                script {
-                    def containerName = "smoke-${env.BUILD_NUMBER}"
-                    def networkName   = "smoke-net-${env.BUILD_NUMBER}"
-
-                    try {
-                        // Create an isolated network for this test
-                        sh "docker network create ${networkName}"
-
-                        // Start the app container on that network
-                        sh """
-                            docker run -d \
-                            --name ${containerName} \
-                            --network ${networkName} \
-                            ${env.APP_NAME}:latest
-                        """
-
-                        // Wait for app to start
-                        sh 'sleep 10'
-
-                        // Run curl FROM INSIDE a container on the same network
-                        // This avoids the localhost-between-containers problem
-                        sh """
-                            docker run --rm \
-                            --network ${networkName} \
-                            curlimages/curl:latest \
-                            curl -s -o /dev/null -w "%{http_code}" \
-                            http://${containerName}:3001/health \
-                            | grep -q "200" && \
-                            echo "✅ Smoke test PASSED" || \
-                            (echo "❌ Smoke test FAILED" && exit 1)
-                        """
-
-                    } finally {
-                        // Always clean up — even if test fails
-                        sh "docker stop  ${containerName} || true"
-                        sh "docker rm    ${containerName} || true"
-                        sh "docker network rm ${networkName} || true"
+                        } finally {
+                            sh "docker stop  ${containerName} || true"
+                            sh "docker rm    ${containerName} || true"
+                            sh "docker network rm ${networkName} || true"
+                        }
                     }
                 }
             }
